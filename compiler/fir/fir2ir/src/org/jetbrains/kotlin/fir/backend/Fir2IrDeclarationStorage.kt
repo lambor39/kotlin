@@ -6,26 +6,27 @@
 package org.jetbrains.kotlin.fir.backend
 
 import org.jetbrains.kotlin.backend.common.descriptors.WrappedClassDescriptor
+import org.jetbrains.kotlin.backend.common.descriptors.WrappedSimpleFunctionDescriptor
 import org.jetbrains.kotlin.fir.FirSession
-import org.jetbrains.kotlin.fir.declarations.FirRegularClass
-import org.jetbrains.kotlin.fir.declarations.classId
+import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.descriptors.FirModuleDescriptor
 import org.jetbrains.kotlin.fir.descriptors.FirPackageFragmentDescriptor
 import org.jetbrains.kotlin.fir.resolve.FirSymbolProvider
 import org.jetbrains.kotlin.fir.service
 import org.jetbrains.kotlin.fir.symbols.impl.FirClassSymbol
-import org.jetbrains.kotlin.ir.declarations.IrClass
-import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
-import org.jetbrains.kotlin.ir.declarations.IrExternalPackageFragment
+import org.jetbrains.kotlin.fir.symbols.impl.FirFunctionSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
+import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrClassImpl
+import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
+import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
+import org.jetbrains.kotlin.ir.symbols.IrPropertySymbol
 import org.jetbrains.kotlin.ir.util.SymbolTable
 import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.psi.psiUtil.endOffset
-import org.jetbrains.kotlin.psi.psiUtil.startOffsetSkippingComments
 
 class Fir2IrDeclarationStorage(
-    session: FirSession,
+    private val session: FirSession,
     private val irSymbolTable: SymbolTable,
     private val moduleDescriptor: FirModuleDescriptor
 ) {
@@ -34,6 +35,8 @@ class Fir2IrDeclarationStorage(
     private val fragmentCache = mutableMapOf<FqName, IrExternalPackageFragment>()
 
     private val classCache = mutableMapOf<FirRegularClass, IrClass>()
+
+    private val functionCache = mutableMapOf<FirNamedFunction, IrSimpleFunction>()
 
     private fun getIrExternalPackageFragment(fqName: FqName): IrExternalPackageFragment {
         return fragmentCache.getOrPut(fqName) {
@@ -76,8 +79,57 @@ class Fir2IrDeclarationStorage(
         }
     }
 
+    fun getIrFunction(function: FirNamedFunction): IrSimpleFunction {
+        return functionCache.getOrPut(function) {
+            val descriptor = WrappedSimpleFunctionDescriptor()
+            val origin = IrDeclarationOrigin.DEFINED
+            function.convertWithOffsets { startOffset, endOffset ->
+                irSymbolTable.declareSimpleFunction(startOffset, endOffset, origin, descriptor) { symbol ->
+                    IrFunctionImpl(
+                        startOffset, endOffset, origin, symbol,
+                        function.name, function.visibility, function.modality!!,
+                        function.returnTypeRef.toIrType(session, this),
+                        function.isInline, function.isExternal,
+                        function.isTailRec, function.isSuspend
+                    )
+                }
+            }.apply {
+                val callableId = function.symbol.callableId
+                // TODO: parent!!!
+                // TODO: bind descriptor!!!
+            }
+        }
+    }
+
+    fun getIrConstructor(constructor: FirConstructor): IrConstructor {
+        TODO()
+    }
+
+    fun getIrProperty(property: FirProperty): IrProperty {
+        TODO()
+    }
+
     fun getIrClassSymbol(firClassSymbol: FirClassSymbol): IrClassSymbol {
         val irClass = getIrClass(firClassSymbol.fir)
         return irSymbolTable.referenceClass(irClass.descriptor)
+    }
+
+    fun getIrFunctionSymbol(firFunctionSymbol: FirFunctionSymbol): IrFunctionSymbol {
+        return when (val firDeclaration = firFunctionSymbol.fir) {
+            is FirNamedFunction -> {
+                val irDeclaration = getIrFunction(firDeclaration)
+                irSymbolTable.referenceSimpleFunction(irDeclaration.descriptor)
+            }
+            is FirConstructor -> {
+                val irDeclaration = getIrConstructor(firDeclaration)
+                irSymbolTable.referenceConstructor(irDeclaration.descriptor)
+            }
+            else -> throw AssertionError("Should not be here")
+        }
+    }
+
+    fun getIrPropertySymbol(firPropertySymbol: FirPropertySymbol): IrPropertySymbol {
+        val irProperty = getIrProperty(firPropertySymbol.fir as FirProperty)
+        return irSymbolTable.referenceProperty(irProperty.descriptor)
     }
 }

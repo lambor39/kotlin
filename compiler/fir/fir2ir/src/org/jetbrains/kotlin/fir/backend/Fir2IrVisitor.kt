@@ -168,10 +168,9 @@ class Fir2IrVisitor(
             }
     }
 
-    private fun <T : IrFunction> T.setContent(descriptor: WrappedCallableDescriptor<T>, firFunction: FirFunction): T {
+    private fun <T : IrFunction> T.setContent(descriptor: FunctionDescriptor, firFunction: FirFunction): T {
         setParent()
         withParent {
-            descriptor.bind(this)
             symbolTable.enterScope(descriptor)
             val containingClass = classStack.lastOrNull()
             if (firFunction !is FirConstructor && containingClass != null) {
@@ -254,19 +253,8 @@ class Fir2IrVisitor(
     }
 
     override fun visitNamedFunction(namedFunction: FirNamedFunction, data: Any?): IrElement {
-        val descriptor = WrappedSimpleFunctionDescriptor()
-        val origin = IrDeclarationOrigin.DEFINED
-        return namedFunction.convertWithOffsets { startOffset, endOffset ->
-            symbolTable.declareSimpleFunction(startOffset, endOffset, origin, descriptor) { symbol ->
-                IrFunctionImpl(
-                    startOffset, endOffset, origin, symbol,
-                    namedFunction.name, namedFunction.visibility, namedFunction.modality!!,
-                    namedFunction.returnTypeRef.toIrType(session, declarationStorage),
-                    namedFunction.isInline, namedFunction.isExternal,
-                    namedFunction.isTailRec, namedFunction.isSuspend
-                ).withFunction { setContent(descriptor, namedFunction) }
-            }
-        }
+        val irFunction = declarationStorage.getIrFunction(namedFunction)
+        return irFunction.withFunction { setContent(irFunction.descriptor, namedFunction) }
     }
 
     override fun visitValueParameter(valueParameter: FirValueParameter, data: Any?): IrElement {
@@ -447,7 +435,7 @@ class Fir2IrVisitor(
 
     private fun FirQualifiedAccess.toIrExpression(typeRef: FirTypeRef): IrExpression {
         val type = typeRef.toIrType(this@Fir2IrVisitor.session, declarationStorage)
-        val symbol = calleeReference.toSymbol(symbolTable)
+        val symbol = calleeReference.toSymbol(declarationStorage)
         return typeRef.convertWithOffsets { startOffset, endOffset ->
             when {
                 symbol is IrFunctionSymbol -> IrCallImpl(startOffset, endOffset, type, symbol)
@@ -480,7 +468,7 @@ class Fir2IrVisitor(
 
     override fun visitVariableAssignment(variableAssignment: FirVariableAssignment, data: Any?): IrElement {
         val calleeReference = variableAssignment.calleeReference
-        val symbol = calleeReference.toSymbol(symbolTable)
+        val symbol = calleeReference.toSymbol(declarationStorage)
         return variableAssignment.convertWithOffsets { startOffset, endOffset ->
             if (symbol is IrFieldSymbol && symbol.isBound) {
                 IrSetFieldImpl(

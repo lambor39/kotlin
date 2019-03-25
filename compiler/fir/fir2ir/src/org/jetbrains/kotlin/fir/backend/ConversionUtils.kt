@@ -5,8 +5,6 @@
 
 package org.jetbrains.kotlin.fir.backend
 
-import org.jetbrains.kotlin.backend.common.descriptors.WrappedPropertyDescriptor
-import org.jetbrains.kotlin.backend.common.descriptors.WrappedSimpleFunctionDescriptor
 import org.jetbrains.kotlin.fir.*
 import org.jetbrains.kotlin.fir.resolve.toSymbol
 import org.jetbrains.kotlin.fir.symbols.ConeClassifierSymbol
@@ -18,7 +16,6 @@ import org.jetbrains.kotlin.ir.types.IrErrorType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.impl.IrErrorTypeImpl
 import org.jetbrains.kotlin.ir.types.impl.IrSimpleTypeImpl
-import org.jetbrains.kotlin.ir.util.SymbolTable
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffsetSkippingComments
 import org.jetbrains.kotlin.types.Variance
@@ -66,18 +63,18 @@ fun ConeClassifierSymbol.toIrSymbol(declarationStorage: Fir2IrDeclarationStorage
     }
 }
 
-fun FirReference.toSymbol(symbolTable: SymbolTable): IrSymbol? {
+fun FirReference.toSymbol(declarationStorage: Fir2IrDeclarationStorage): IrSymbol? {
     if (this is FirNamedReference) {
-        return toSymbol(symbolTable)
+        return toSymbol(declarationStorage)
     }
     return null
 }
 
-fun FirNamedReference.toSymbol(symbolTable: SymbolTable): IrSymbol? {
+fun FirNamedReference.toSymbol(declarationStorage: Fir2IrDeclarationStorage): IrSymbol? {
     if (this is FirResolvedCallableReference) {
         when (val callableSymbol = this.callableSymbol) {
-            is FirFunctionSymbol -> return callableSymbol.toFunctionSymbol(symbolTable)
-            is FirPropertySymbol -> return callableSymbol.toPropertySymbol(symbolTable)
+            is FirFunctionSymbol -> return callableSymbol.toFunctionSymbol(declarationStorage)
+            is FirPropertySymbol -> return callableSymbol.toPropertySymbol(declarationStorage)
         }
     }
     return null
@@ -87,10 +84,10 @@ fun FirClassSymbol.toClassSymbol(declarationStorage: Fir2IrDeclarationStorage): 
     return declarationStorage.getIrClassSymbol(this)
 }
 
-fun FirFunctionSymbol.toFunctionSymbol(symbolTable: SymbolTable): IrFunctionSymbol {
-    return symbolTable.referenceDeclaredFunction(WrappedSimpleFunctionDescriptor())
+fun FirFunctionSymbol.toFunctionSymbol(declarationStorage: Fir2IrDeclarationStorage): IrFunctionSymbol {
+    return declarationStorage.getIrFunctionSymbol(this)
 }
 
-fun FirPropertySymbol.toPropertySymbol(symbolTable: SymbolTable): IrPropertySymbol {
-    return symbolTable.referenceProperty(WrappedPropertyDescriptor())
+fun FirPropertySymbol.toPropertySymbol(declarationStorage: Fir2IrDeclarationStorage): IrPropertySymbol {
+    return declarationStorage.getIrPropertySymbol(this)
 }
